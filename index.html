@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CSV Cleaner — Ecom Edition</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0d0d0d;
+    --surface: #161616;
+    --surface2: #1e1e1e;
+    --border: #2a2a2a;
+    --accent: #e8ff47;
+    --text: #f0f0f0;
+    --muted: #666;
+    --danger: #ff4444;
+    --success: #44ff88;
+    --mono: 'Space Mono', monospace;
+    --sans: 'Syne', sans-serif;
+    --radius: 6px;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 18px 28px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+  }
+  .logo { font-family: var(--sans); font-weight: 800; font-size: 1.1rem; letter-spacing: -0.02em; color: var(--accent); }
+  .logo span { color: var(--text); }
+  header p { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); margin-left: auto; }
+
+  .app { display: grid; grid-template-columns: 320px 1fr; flex: 1; min-height: 0; height: calc(100vh - 57px); }
+
+  .sidebar { border-right: 1px solid var(--border); overflow-y: auto; display: flex; flex-direction: column; gap: 0; }
+
+  .sidebar-section { border-bottom: 1px solid var(--border); padding: 18px 20px; }
+
+  .sidebar-section h3 { font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); margin-bottom: 12px; }
+
+  .drop-zone { border: 1.5px dashed var(--border); border-radius: var(--radius); padding: 24px 16px; text-align: center; cursor: pointer; transition: border-color 0.2s, background 0.2s; position: relative; }
+  .drop-zone:hover, .drop-zone.dragover { border-color: var(--accent); background: rgba(232,255,71,0.04); }
+  .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .drop-zone .icon { font-size: 1.6rem; margin-bottom: 8px; display: block; }
+  .drop-zone p { font-family: var(--mono); font-size: 0.7rem; color: var(--muted); line-height: 1.6; }
+
+  .or-divider { display: flex; align-items: center; gap: 10px; margin: 12px 0; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+  .or-divider::before, .or-divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  textarea.csv-paste { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 0.68rem; padding: 10px; resize: vertical; min-height: 80px; outline: none; transition: border-color 0.2s; }
+  textarea.csv-paste:focus { border-color: var(--accent); }
+  textarea.csv-paste::placeholder { color: var(--muted); }
+
+  .rule-block { margin-bottom: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+  .rule-header { display: flex; align-items: center; padding: 9px 12px; cursor: pointer; user-select: none; gap: 8px; }
+  .rule-header:hover { background: rgba(255,255,255,0.03); }
+
+  .rule-toggle { width: 32px; height: 18px; background: var(--border); border-radius: 9px; position: relative; cursor: pointer; transition: background 0.2s; flex-shrink: 0; border: none; }
+  .rule-toggle.on { background: var(--accent); }
+  .rule-toggle::after { content: ''; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+  .rule-toggle.on::after { transform: translateX(14px); background: var(--bg); }
+
+  .rule-label { font-size: 0.8rem; font-weight: 600; flex: 1; }
+  .rule-body { padding: 10px 12px 12px; border-top: 1px solid var(--border); display: none; }
+  .rule-body.open { display: block; }
+  .rule-body label { display: block; font-family: var(--mono); font-size: 0.65rem; color: var(--muted); margin-bottom: 5px; margin-top: 10px; }
+  .rule-body label:first-child { margin-top: 0; }
+
+  input[type="text"], select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); color: var(--text); font-family: var(--mono); font-size: 0.72rem; padding: 7px 9px; outline: none; transition: border-color 0.2s; }
+  input[type="text"]:focus, select:focus { border-color: var(--accent); }
+  select option { background: var(--surface2); }
+
+  .tag-input-wrap { display: flex; flex-wrap: wrap; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 6px 8px; min-height: 36px; cursor: text; transition: border-color 0.2s; }
+  .tag-input-wrap:focus-within { border-color: var(--accent); }
+  .tag { background: var(--surface2); border: 1px solid var(--border); border-radius: 3px; padding: 2px 6px 2px 8px; font-family: var(--mono); font-size: 0.65rem; display: flex; align-items: center; gap: 5px; }
+  .tag button { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.7rem; padding: 0; line-height: 1; }
+  .tag button:hover { color: var(--danger); }
+  .tag-input { background: none; border: none; color: var(--text); font-family: var(--mono); font-size: 0.72rem; outline: none; flex: 1; min-width: 80px; padding: 2px 0; }
+
+  .col-map-row { display: grid; grid-template-columns: 1fr auto 1fr auto; gap: 5px; align-items: center; margin-bottom: 6px; }
+  .col-map-row .arrow { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); text-align: center; }
+  .col-map-row button.remove-row { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; padding: 2px 4px; }
+  .col-map-row button.remove-row:hover { color: var(--danger); }
+
+  .reorder-list { display: flex; flex-direction: column; gap: 4px; }
+  .reorder-item { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 5px 8px; cursor: grab; font-family: var(--mono); font-size: 0.7rem; user-select: none; }
+  .reorder-item:active { cursor: grabbing; }
+  .reorder-item .drag-handle { color: var(--muted); flex-shrink: 0; }
+  .reorder-item .col-name { flex: 1; }
+  .reorder-item input[type="checkbox"] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border-radius: var(--radius); font-family: var(--mono); font-size: 0.7rem; font-weight: 700; cursor: pointer; border: none; transition: all 0.15s; text-transform: uppercase; letter-spacing: 0.05em; }
+  .btn-primary { background: var(--accent); color: var(--bg); }
+  .btn-primary:hover { background: #d4eb30; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-danger { background: none; color: var(--danger); border: 1px solid var(--danger); }
+  .btn-danger:hover { background: rgba(255,68,68,0.1); }
+  .btn:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-sm { padding: 5px 10px; font-size: 0.65rem; }
+  .btn-full { width: 100%; justify-content: center; }
+
+  .ruleset-item { display: flex; align-items: center; gap: 8px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 10px; margin-bottom: 6px; font-family: var(--mono); font-size: 0.7rem; }
+  .ruleset-item .rs-name { flex: 1; }
+  .ruleset-item .rs-date { color: var(--muted); font-size: 0.62rem; }
+
+  .main { display: flex; flex-direction: column; overflow: hidden; }
+
+  .preview-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+
+  .tab-group { display: flex; gap: 2px; background: var(--surface2); padding: 3px; border-radius: var(--radius); border: 1px solid var(--border); }
+  .tab { padding: 5px 12px; border-radius: 4px; font-family: var(--mono); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.06em; cursor: pointer; border: none; background: none; color: var(--muted); transition: all 0.15s; }
+  .tab.active { background: var(--surface); color: var(--accent); }
+
+  .stats-bar { display: flex; gap: 16px; margin-left: auto; }
+  .stat { font-family: var(--mono); font-size: 0.65rem; color: var(--muted); }
+  .stat strong { color: var(--text); margin-right: 3px; }
+
+  .preview-pane { flex: 1; overflow: auto; position: relative; }
+
+  .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 12px; color: var(--muted); font-family: var(--mono); font-size: 0.75rem; text-align: center; padding: 40px; }
+  .empty-state .big-icon { font-size: 3rem; opacity: 0.3; }
+
+  .preview-table-wrap { overflow: auto; height: 100%; }
+
+  table { width: max-content; min-width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 0.68rem; }
+  thead th { position: sticky; top: 0; background: var(--surface); padding: 8px 14px; text-align: left; font-weight: 700; white-space: nowrap; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); color: var(--accent); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.05em; z-index: 2; }
+  tbody tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  tbody tr:hover td { background: rgba(232,255,71,0.04); }
+  td { padding: 7px 14px; border-bottom: 1px solid var(--border); border-right: 1px solid var(--border); white-space: nowrap; max-width: 280px; overflow: hidden; text-overflow: ellipsis; color: var(--text); vertical-align: top; }
+  td.changed { background: rgba(232,255,71,0.08) !important; color: var(--accent); }
+
+  .diff-grid { display: grid; grid-template-columns: 1fr 1fr; height: 100%; }
+  .diff-pane { overflow: auto; border-right: 1px solid var(--border); }
+  .diff-pane:last-child { border-right: none; }
+  .diff-pane-label { position: sticky; top: 0; z-index: 3; padding: 7px 14px; background: var(--surface); border-bottom: 1px solid var(--border); font-family: var(--mono); font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .diff-pane-label .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .diff-pane-label.clean .dot { background: var(--success); }
+
+  .bottom-bar { border-top: 1px solid var(--border); padding: 12px 20px; display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); display: flex; align-items: center; justify-content: center; z-index: 200; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 24px; width: 360px; max-width: 90vw; }
+  .modal h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
+  .modal .modal-actions { display: flex; gap: 8px; margin-top: 16px; justify-content: flex-end; }
+
+  .notify { position: fixed; bottom: 24px; right: 24px; background: var(--surface2); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius); padding: 10px 16px; font-family: var(--mono); font-size: 0.72rem; z-index: 300; transform: translateY(20px); opacity: 0; transition: all 0.2s; pointer-events: none; }
+  .notify.show { transform: translateY(0); opacity: 1; }
+
+  .add-btn { background: none; border: 1px dashed var(--border); color: var(--muted); border-radius: var(--radius); width: 100%; padding: 6px; font-family: var(--mono); font-size: 0.68rem; cursor: pointer; transition: all 0.15s; margin-top: 6px; }
+  .add-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">CSV<span>Cleaner</span></div>
+  <p>Ecom Edition — No backend. No sign-up.</p>
+</header>
+
+<div class="app">
+  <aside class="sidebar">
+
+    <div class="sidebar-section">
+      <h3>📁 Import CSV</h3>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="fileInput" accept=".csv,.txt" />
+        <span class="icon">⬆</span>
+        <p>Drop a CSV file here<br>or click to browse</p>
+      </div>
+      <div class="or-divider">or paste raw CSV</div>
+      <textarea class="csv-paste" id="csvPaste" placeholder="col1,col2,col3&#10;val1,val2,val3"></textarea>
+      <button class="btn btn-secondary btn-full" style="margin-top:8px" id="parseBtn">Parse CSV</button>
+    </div>
+
+    <div class="sidebar-section" id="rulesSection">
+      <h3>⚙ Cleaning Rules</h3>
+
+      <!-- TRIM / CASE -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-trim" onclick="event.stopPropagation();toggleRule('trim',this)"></button>
+          <span class="rule-label">Trim &amp; Case</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-trim">
+          <label>Apply to columns (blank = all)</label>
+          <div class="tag-input-wrap" id="tags-trim-cols"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <label>Case transform</label>
+          <select id="trim-case">
+            <option value="none">No change</option>
+            <option value="title">Title Case</option>
+            <option value="upper">UPPER CASE</option>
+            <option value="lower">lower case</option>
+            <option value="sentence">Sentence case</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="trim-whitespace" checked style="accent-color:var(--accent);width:14px;height:14px" />
+            Trim whitespace
+          </label>
+        </div>
+      </div>
+
+      <!-- DEDUPE -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-dedupe" onclick="event.stopPropagation();toggleRule('dedupe',this)"></button>
+          <span class="rule-label">Remove Duplicates</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-dedupe">
+          <label>Key columns (blank = entire row)</label>
+          <div class="tag-input-wrap" id="tags-dedupe-cols"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <label>Keep</label>
+          <select id="dedupe-keep">
+            <option value="first">First occurrence</option>
+            <option value="last">Last occurrence</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- STRIP -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-strip" onclick="event.stopPropagation();toggleRule('strip',this)"></button>
+          <span class="rule-label">Strip Characters / HTML</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-strip">
+          <label>Apply to columns (blank = all)</label>
+          <div class="tag-input-wrap" id="tags-strip-cols"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="strip-html" checked style="accent-color:var(--accent);width:14px;height:14px" />
+            Strip HTML tags
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:8px">
+            <input type="checkbox" id="strip-special" style="accent-color:var(--accent);width:14px;height:14px" />
+            Strip special chars (keep alphanumeric + spaces)
+          </label>
+          <label style="margin-top:10px">Custom chars to remove</label>
+          <input type="text" id="strip-custom" placeholder="e.g. * ~ # @" />
+        </div>
+      </div>
+
+      <!-- PROMO -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-promo" onclick="event.stopPropagation();toggleRule('promo',this)"></button>
+          <span class="rule-label">Remove Promo Text</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-promo">
+          <label>Apply to columns (blank = all)</label>
+          <div class="tag-input-wrap" id="tags-promo-cols"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <label>Promo keywords to remove</label>
+          <div class="tag-input-wrap" id="tags-promo-words"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <small style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);display:block;margin-top:6px">Removes these words + any surrounding brackets/parens.</small>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="promo-brackets" checked style="accent-color:var(--accent);width:14px;height:14px" />
+            Also strip all bracketed/parenthesized text
+          </label>
+        </div>
+      </div>
+
+      <!-- VARIANT SPLIT -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-variant" onclick="event.stopPropagation();toggleRule('variant',this)"></button>
+          <span class="rule-label">Split Variants</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-variant">
+          <label>Source column</label>
+          <input type="text" id="variant-source" placeholder="e.g. Variant" />
+          <label>Separator</label>
+          <input type="text" id="variant-sep" placeholder="e.g. - or / or |" />
+          <label>Output column names (one per part)</label>
+          <div class="tag-input-wrap" id="tags-variant-names"><input class="tag-input" placeholder="e.g. Color, Size" /></div>
+          <small style="font-family:var(--mono);font-size:0.62rem;color:var(--muted);display:block;margin-top:6px">Add one name per split part in order.</small>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px">
+            <input type="checkbox" id="variant-remove-src" checked style="accent-color:var(--accent);width:14px;height:14px" />
+            Remove source column after split
+          </label>
+        </div>
+      </div>
+
+      <!-- RENAME -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-rename" onclick="event.stopPropagation();toggleRule('rename',this)"></button>
+          <span class="rule-label">Rename Columns</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-rename">
+          <div id="rename-rows"></div>
+          <button class="add-btn" onclick="addRenameRow()">+ Add mapping</button>
+        </div>
+      </div>
+
+      <!-- FILL EMPTY -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-fill" onclick="event.stopPropagation();toggleRule('fill',this)"></button>
+          <span class="rule-label">Fill Empty Cells</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-fill">
+          <div id="fill-rows"></div>
+          <button class="add-btn" onclick="addFillRow()">+ Add rule</button>
+        </div>
+      </div>
+
+      <!-- KEYWORD COLUMN -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-keyword" onclick="event.stopPropagation();toggleRule('keyword',this)"></button>
+          <span class="rule-label">Build Keyword Column</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-keyword">
+          <label>Output column name</label>
+          <input type="text" id="keyword-col-name" placeholder="e.g. Keywords" />
+          <label>Source columns to concatenate</label>
+          <div class="tag-input-wrap" id="tags-keyword-sources"><input class="tag-input" placeholder="Type + Enter" /></div>
+          <label>Separator between values</label>
+          <input type="text" id="keyword-sep" placeholder="e.g. , or space" value=", " />
+          <label>Static prefix (optional)</label>
+          <input type="text" id="keyword-prefix" placeholder="e.g. buy, shop, " />
+        </div>
+      </div>
+
+      <!-- REORDER / HIDE -->
+      <div class="rule-block">
+        <div class="rule-header" onclick="toggleBody(this)">
+          <button class="rule-toggle" id="toggle-reorder" onclick="event.stopPropagation();toggleRule('reorder',this)"></button>
+          <span class="rule-label">Reorder / Hide Columns</span>
+          <span style="color:var(--muted);font-size:0.7rem">▾</span>
+        </div>
+        <div class="rule-body" id="body-reorder">
+          <p id="reorder-placeholder" style="font-family:var(--mono);font-size:0.65rem;color:var(--muted);margin-bottom:8px">Load a CSV first to configure.</p>
+          <div class="reorder-list" id="reorder-list"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <div class="sidebar-section">
+      <button class="btn btn-primary btn-full" id="applyBtn" disabled onclick="applyRules()">&#9654; Apply Rules</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>💾 Saved Rulesets</h3>
+      <div id="rulesets-list"></div>
+      <button class="btn btn-secondary btn-full btn-sm" style="margin-top:8px" onclick="openSaveModal()">Save current ruleset</button>
+    </div>
+
+  </aside>
+
+  <main class="main">
+    <div class="preview-toolbar">
+      <div class="tab-group">
+        <button class="tab active" id="tab-original" onclick="switchTab('original',this)">Original</button>
+        <button class="tab" id="tab-cleaned" onclick="switchTab('cleaned',this)">Cleaned</button>
+        <button class="tab" id="tab-diff" onclick="switchTab('diff',this)">Diff</button>
+      </div>
+      <div class="stats-bar">
+        <span class="stat"><strong id="stat-rows">—</strong> rows</span>
+        <span class="stat"><strong id="stat-cols">—</strong> cols</span>
+        <span class="stat" id="stat-changes" style="color:var(--accent)"></span>
+      </div>
+    </div>
+
+    <div class="preview-pane" id="previewPane">
+      <div class="empty-state">
+        <span class="big-icon">⬆</span>
+        <span>Upload or paste a CSV to get started</span>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <button class="btn btn-secondary" id="resetBtn" disabled onclick="resetCleaned()">Reset</button>
+      <div style="flex:1"></div>
+      <button class="btn btn-primary" id="downloadBtn" disabled onclick="downloadCSV()">⬇ Download Cleaned CSV</button>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="saveModal">
+  <div class="modal">
+    <h3>Save Ruleset</h3>
+    <label style="font-family:var(--mono);font-size:0.7rem;color:var(--muted);display:block;margin-bottom:6px">Ruleset name</label>
+    <input type="text" id="rulesetName" placeholder="e.g. Amazon Supplier A" />
+    <div class="modal-actions">
+      <button class="btn btn-secondary" onclick="closeSaveModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveRuleset()">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="notify" id="notify"></div>
+
+<script>
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let rawData = [], rawHeaders = [], cleanedData = [], cleanedHeaders = [];
+let activeTab = 'original';
+let activeRules = {};
+const tagState = {};
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  initTagInputs();
+  addRenameRow();
+  addFillRow();
+  renderRulesetList();
+  setupDragDrop();
+});
+
+function initTagInputs() {
+  const inputs = [
+    ['tags-trim-cols', []],
+    ['tags-dedupe-cols', []],
+    ['tags-strip-cols', []],
+    ['tags-promo-cols', []],
+    ['tags-promo-words', ['NEW','SALE','HOT','LIMITED','PROMO','DEAL','BUY NOW','FREE SHIPPING']],
+    ['tags-variant-names', []],
+    ['tags-keyword-sources', []],
+  ];
+  inputs.forEach(([id, init]) => setupTagInput(id, init));
+}
+
+// ─── FILE / PARSE ─────────────────────────────────────────────────────────────
+function setupDragDrop() {
+  const dz = document.getElementById('dropZone');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+  dz.addEventListener('dragleave', () => dz.classList.remove('dragover'));
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('dragover'); const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+  document.getElementById('fileInput').addEventListener('change', e => { if (e.target.files[0]) readFile(e.target.files[0]); });
+  document.getElementById('parseBtn').addEventListener('click', () => { const t = document.getElementById('csvPaste').value.trim(); if (t) parseCSV(t); else notify('Paste some CSV first'); });
+}
+
+function readFile(file) {
+  const r = new FileReader();
+  r.onload = e => parseCSV(e.target.result);
+  r.readAsText(file);
+}
+
+function parseCSV(text) {
+  const result = Papa.parse(text, { header: true, skipEmptyLines: true });
+  if (!result.data.length) { notify('No data found'); return; }
+  rawHeaders = result.meta.fields;
+  rawData = result.data;
+  cleanedData = []; cleanedHeaders = [];
+  document.getElementById('applyBtn').disabled = false;
+  updateReorderList(rawHeaders);
+  switchTabView('original');
+  updateStats(rawData, rawHeaders);
+  notify(`Loaded ${rawData.length} rows · ${rawHeaders.length} columns`);
+}
+
+// ─── TOGGLES ──────────────────────────────────────────────────────────────────
+function toggleRule(id, btn) {
+  activeRules[id] = !activeRules[id];
+  btn.classList.toggle('on', activeRules[id]);
+}
+
+function toggleBody(header) {
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+  header.querySelector('span:last-child').textContent = body.classList.contains('open') ? '▴' : '▾';
+}
+
+// ─── TAG INPUTS ───────────────────────────────────────────────────────────────
+function setupTagInput(id, initial = []) {
+  tagState[id] = [...initial];
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  let inp = wrap.querySelector('.tag-input');
+  if (!inp) { inp = document.createElement('input'); inp.className = 'tag-input'; inp.placeholder = 'Type + Enter'; wrap.appendChild(inp); }
+  renderTags(id);
+  inp.addEventListener('keydown', e => {
+    if ((e.key === 'Enter' || e.key === ',') && inp.value.trim()) {
+      e.preventDefault(); addTag(id, inp.value.trim()); inp.value = '';
+    } else if (e.key === 'Backspace' && !inp.value && tagState[id].length) {
+      tagState[id].pop(); renderTags(id);
+    }
+  });
+  wrap.addEventListener('click', () => inp.focus());
+}
+
+function addTag(id, val) {
+  if (val && !tagState[id].includes(val)) { tagState[id].push(val); renderTags(id); }
+}
+
+function removeTag(id, idx) { tagState[id].splice(idx, 1); renderTags(id); }
+
+function renderTags(id) {
+  const wrap = document.getElementById(id);
+  if (!wrap) return;
+  [...wrap.querySelectorAll('.tag')].forEach(t => t.remove());
+  const inp = wrap.querySelector('.tag-input');
+  tagState[id].forEach((t, i) => {
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.innerHTML = `${escHtml(t)}<button onclick="removeTag('${id}',${i})">✕</button>`;
+    wrap.insertBefore(tag, inp);
+  });
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ─── DYNAMIC ROWS ─────────────────────────────────────────────────────────────
+function addRenameRow() {
+  const c = document.getElementById('rename-rows');
+  const r = document.createElement('div'); r.className = 'col-map-row';
+  r.innerHTML = `<input type="text" placeholder="From" class="rename-from" /><span class="arrow">→</span><input type="text" placeholder="To" class="rename-to" /><button class="remove-row" onclick="this.closest('.col-map-row').remove()">✕</button>`;
+  c.appendChild(r);
+}
+
+function addFillRow() {
+  const c = document.getElementById('fill-rows');
+  const r = document.createElement('div'); r.className = 'col-map-row';
+  r.innerHTML = `<input type="text" placeholder="Column" class="fill-col" /><span class="arrow">→</span><input type="text" placeholder="Value" class="fill-val" /><button class="remove-row" onclick="this.closest('.col-map-row').remove()">✕</button>`;
+  c.appendChild(r);
+}
+
+// ─── REORDER ──────────────────────────────────────────────────────────────────
+function updateReorderList(headers) {
+  const list = document.getElementById('reorder-list');
+  const ph = document.getElementById('reorder-placeholder');
+  if (ph) ph.style.display = 'none';
+  list.innerHTML = '';
+  headers.forEach(h => {
+    const item = document.createElement('div');
+    item.className = 'reorder-item'; item.draggable = true; item.dataset.col = h;
+    item.innerHTML = `<span class="drag-handle">⠿</span><span class="col-name">${escHtml(h)}</span><input type="checkbox" checked title="Include in export" />`;
+    setupReorderDrag(item);
+    list.appendChild(item);
+  });
+}
+
+function setupReorderDrag(item) {
+  item.addEventListener('dragstart', () => item.classList.add('dragging'));
+  item.addEventListener('dragend', () => item.classList.remove('dragging'));
+  item.addEventListener('dragover', e => {
+    e.preventDefault();
+    const dragging = document.querySelector('.reorder-item.dragging');
+    if (dragging && dragging !== item) {
+      const list = item.parentNode;
+      const items = [...list.children];
+      if (items.indexOf(dragging) < items.indexOf(item)) list.insertBefore(dragging, item.nextSibling);
+      else list.insertBefore(dragging, item);
+    }
+  });
+}
+
+function getReorderConfig() {
+  return [...document.querySelectorAll('.reorder-item')].map(i => ({ col: i.dataset.col, include: i.querySelector('input[type="checkbox"]').checked }));
+}
+
+// ─── RULES ENGINE ─────────────────────────────────────────────────────────────
+function applyRules() {
+  if (!rawData.length) { notify('Load a CSV first'); return; }
+  let data = rawData.map(r => ({ ...r }));
+  let headers = [...rawHeaders];
+
+  if (activeRules['trim']) {
+    const cols = tagState['tags-trim-cols'];
+    const mode = document.getElementById('trim-case').value;
+    const trimWs = document.getElementById('trim-whitespace').checked;
+    data = data.map(row => {
+      const nr = { ...row };
+      (cols.length ? cols : headers).forEach(col => {
+        if (nr[col] == null) return;
+        let v = String(nr[col]);
+        if (trimWs) v = v.trim();
+        if (mode === 'title') v = v.replace(/\w\S*/g, w => w[0].toUpperCase() + w.slice(1).toLowerCase());
+        else if (mode === 'upper') v = v.toUpperCase();
+        else if (mode === 'lower') v = v.toLowerCase();
+        else if (mode === 'sentence') v = v[0].toUpperCase() + v.slice(1).toLowerCase();
+        nr[col] = v;
+      });
+      return nr;
+    });
+  }
+
+  if (activeRules['dedupe']) {
+    const cols = tagState['tags-dedupe-cols'];
+    const keep = document.getElementById('dedupe-keep').value;
+    const key = row => (cols.length ? cols : headers).map(c => row[c]).join('\x00');
+    const seen = new Map();
+    data.forEach((row, i) => { const k = key(row); if (keep === 'first' && !seen.has(k)) seen.set(k, i); else if (keep === 'last') seen.set(k, i); });
+    data = [...seen.values()].sort((a,b) => a-b).map(i => data[i]);
+  }
+
+  if (activeRules['strip']) {
+    const cols = tagState['tags-strip-cols'];
+    const sh = document.getElementById('strip-html').checked;
+    const ss = document.getElementById('strip-special').checked;
+    const custom = document.getElementById('strip-custom').value;
+    data = data.map(row => {
+      const nr = { ...row };
+      (cols.length ? cols : headers).forEach(col => {
+        if (nr[col] == null) return;
+        let v = String(nr[col]);
+        if (sh) v = v.replace(/<[^>]+>/g, '');
+        if (ss) v = v.replace(/[^a-zA-Z0-9\s]/g, '');
+        if (custom) {
+          const esc = [...custom].map(c => c.replace(/[-[\]{}()*+?.,\\^$|#]/g, '\\$&')).join('');
+          if (esc) v = v.replace(new RegExp(`[${esc}]`, 'g'), '');
+        }
+        nr[col] = v;
+      });
+      return nr;
+    });
+  }
+
+  if (activeRules['promo']) {
+    const cols = tagState['tags-promo-cols'];
+    const words = tagState['tags-promo-words'];
+    const brackets = document.getElementById('promo-brackets').checked;
+    data = data.map(row => {
+      const nr = { ...row };
+      (cols.length ? cols : headers).forEach(col => {
+        if (nr[col] == null) return;
+        let v = String(nr[col]);
+        if (brackets) v = v.replace(/[\[(][^\])]*[\])]/g, ' ');
+        words.forEach(w => {
+          const esc = w.replace(/[-[\]{}()*+?.,\\^$|#\s]/g, '\\$&');
+          v = v.replace(new RegExp(`\\s*[\\[(]?\\s*${esc}\\s*[\\])]?\\s*`, 'gi'), ' ');
+        });
+        nr[col] = v.replace(/\s{2,}/g, ' ').trim();
+      });
+      return nr;
+    });
+  }
+
+  if (activeRules['variant']) {
+    const src = document.getElementById('variant-source').value.trim();
+    const sep = document.getElementById('variant-sep').value || '-';
+    const names = tagState['tags-variant-names'];
+    const removeSrc = document.getElementById('variant-remove-src').checked;
+    if (src && names.length) {
+      data = data.map(row => {
+        const nr = { ...row };
+        const parts = String(nr[src] || '').split(sep);
+        names.forEach((n, i) => { nr[n] = (parts[i] || '').trim(); });
+        if (removeSrc) delete nr[src];
+        return nr;
+      });
+      headers = headers.filter(h => !(removeSrc && h === src));
+      names.forEach(n => { if (!headers.includes(n)) headers.push(n); });
+    }
+  }
+
+  if (activeRules['rename']) {
+    const maps = [...document.querySelectorAll('#rename-rows .col-map-row')].map(r => ({
+      from: r.querySelector('.rename-from')?.value.trim(),
+      to: r.querySelector('.rename-to')?.value.trim()
+    })).filter(m => m.from && m.to);
+    maps.forEach(({ from, to }) => {
+      headers = headers.map(h => h === from ? to : h);
+      data = data.map(row => {
+        if (from in row) { const nr = { ...row }; nr[to] = nr[from]; delete nr[from]; return nr; }
+        return row;
+      });
+    });
+  }
+
+  if (activeRules['fill']) {
+    const fillCols = [...document.querySelectorAll('.fill-col')];
+    const fillVals = [...document.querySelectorAll('.fill-val')];
+    fillCols.forEach((fc, i) => {
+      const col = fc.value.trim(), val = fillVals[i]?.value || '';
+      if (!col) return;
+      data = data.map(row => { if (!row[col] || !String(row[col]).trim()) row[col] = val; return row; });
+    });
+  }
+
+  if (activeRules['keyword']) {
+    const colName = document.getElementById('keyword-col-name').value.trim() || 'Keywords';
+    const srcs = tagState['tags-keyword-sources'];
+    const sep = document.getElementById('keyword-sep').value;
+    const prefix = document.getElementById('keyword-prefix').value;
+    if (srcs.length) {
+      data = data.map(row => {
+        const parts = srcs.map(s => row[s] || '').filter(Boolean);
+        row[colName] = prefix + parts.join(sep);
+        return row;
+      });
+      if (!headers.includes(colName)) headers.push(colName);
+    }
+  }
+
+  if (activeRules['reorder']) {
+    const cfg = getReorderConfig().filter(c => c.include);
+    const inc = cfg.map(c => c.col).filter(h => headers.includes(h));
+    if (inc.length) {
+      headers = inc;
+      data = data.map(row => { const nr = {}; headers.forEach(h => { nr[h] = row[h]; }); return nr; });
+    }
+  }
+
+  cleanedData = data;
+  cleanedHeaders = headers;
+
+  let changes = 0;
+  cleanedData.forEach((row, i) => {
+    if (i >= rawData.length) { changes += cleanedHeaders.length; return; }
+    cleanedHeaders.forEach(h => { if (String(row[h] ?? '') !== String(rawData[i][h] ?? '')) changes++; });
+  });
+  if (rawData.length > cleanedData.length) changes += (rawData.length - cleanedData.length);
+  document.getElementById('stat-changes').textContent = changes ? `${changes} changes` : '';
+
+  document.getElementById('downloadBtn').disabled = false;
+  document.getElementById('resetBtn').disabled = false;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-cleaned').classList.add('active');
+  activeTab = 'cleaned';
+  switchTabView('cleaned');
+  notify(`Done — ${cleanedData.length} rows · ${cleanedHeaders.length} columns`);
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
+function renderTable(data, headers, compare, compareTo) {
+  const pane = document.getElementById('previewPane');
+  if (!data.length) { showEmpty(); return; }
+  const wrap = document.createElement('div'); wrap.className = 'preview-table-wrap';
+  const table = document.createElement('table');
+  const thead = document.createElement('thead'), htr = document.createElement('tr');
+  headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; htr.appendChild(th); });
+  thead.appendChild(htr); table.appendChild(thead);
+  const tbody = document.createElement('tbody');
+  data.slice(0, 1000).forEach((row, i) => {
+    const tr = document.createElement('tr');
+    headers.forEach(h => {
+      const td = document.createElement('td');
+      td.textContent = row[h] ?? '';
+      if (compare && i < compareTo.length && String(row[h] ?? '') !== String(compareTo[i][h] ?? '')) td.classList.add('changed');
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); wrap.appendChild(table);
+  pane.innerHTML = ''; pane.appendChild(wrap);
+}
+
+function renderDiff() {
+  const pane = document.getElementById('previewPane');
+  if (!cleanedData.length) { notify('Apply rules first'); return; }
+  const grid = document.createElement('div'); grid.className = 'diff-grid';
+  [[rawData, rawHeaders, false, 'ORIGINAL', ''], [cleanedData, cleanedHeaders, true, 'CLEANED', 'clean']].forEach(([data, headers, compare, label, cls]) => {
+    const dp = document.createElement('div'); dp.className = 'diff-pane';
+    const lbl = document.createElement('div'); lbl.className = `diff-pane-label ${cls}`;
+    lbl.innerHTML = `<span class="dot"></span>${label}`;
+    dp.appendChild(lbl);
+    const table = document.createElement('table');
+    const thead = document.createElement('thead'), htr = document.createElement('tr');
+    headers.forEach(h => { const th = document.createElement('th'); th.textContent = h; htr.appendChild(th); });
+    thead.appendChild(htr); table.appendChild(thead);
+    const tbody = document.createElement('tbody');
+    data.slice(0, 1000).forEach((row, i) => {
+      const tr = document.createElement('tr');
+      headers.forEach(h => {
+        const td = document.createElement('td');
+        td.textContent = row[h] ?? '';
+        if (compare && i < rawData.length && String(row[h] ?? '') !== String(rawData[i][h] ?? '')) td.classList.add('changed');
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody); dp.appendChild(table); grid.appendChild(dp);
+  });
+  pane.innerHTML = ''; pane.appendChild(grid);
+}
+
+function showEmpty() {
+  document.getElementById('previewPane').innerHTML = '<div class="empty-state"><span class="big-icon">⬆</span><span>Upload or paste a CSV to get started</span></div>';
+}
+
+function switchTabView(tab) {
+  if (tab === 'original') { if (rawData.length) renderTable(rawData, rawHeaders, false); else showEmpty(); updateStats(rawData, rawHeaders); }
+  else if (tab === 'cleaned') { if (cleanedData.length) { renderTable(cleanedData, cleanedHeaders, true, rawData); updateStats(cleanedData, cleanedHeaders); } else if (rawData.length) renderTable(rawData, rawHeaders, false); }
+  else if (tab === 'diff') renderDiff();
+}
+
+function switchTab(tab, btn) {
+  activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  switchTabView(tab);
+}
+
+function updateStats(data, headers) {
+  document.getElementById('stat-rows').textContent = data.length || '—';
+  document.getElementById('stat-cols').textContent = headers.length || '—';
+}
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+function downloadCSV() {
+  if (!cleanedData.length) return;
+  const csv = Papa.unparse({ fields: cleanedHeaders, data: cleanedData });
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'cleaned.csv'; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function resetCleaned() {
+  cleanedData = []; cleanedHeaders = [];
+  document.getElementById('downloadBtn').disabled = true;
+  document.getElementById('resetBtn').disabled = true;
+  document.getElementById('stat-changes').textContent = '';
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-original').classList.add('active');
+  activeTab = 'original';
+  switchTabView('original');
+}
+
+// ─── RULESETS ─────────────────────────────────────────────────────────────────
+function getRuleState() {
+  return {
+    activeRules: { ...activeRules },
+    trimCase: document.getElementById('trim-case').value,
+    trimWs: document.getElementById('trim-whitespace').checked,
+    dedupeKeep: document.getElementById('dedupe-keep').value,
+    stripHtml: document.getElementById('strip-html').checked,
+    stripSpecial: document.getElementById('strip-special').checked,
+    stripCustom: document.getElementById('strip-custom').value,
+    promoBrackets: document.getElementById('promo-brackets').checked,
+    variantSource: document.getElementById('variant-source').value,
+    variantSep: document.getElementById('variant-sep').value,
+    variantRemoveSrc: document.getElementById('variant-remove-src').checked,
+    kwColName: document.getElementById('keyword-col-name').value,
+    kwSep: document.getElementById('keyword-sep').value,
+    kwPrefix: document.getElementById('keyword-prefix').value,
+    tags: {
+      'tags-trim-cols': [...tagState['tags-trim-cols']],
+      'tags-dedupe-cols': [...tagState['tags-dedupe-cols']],
+      'tags-strip-cols': [...tagState['tags-strip-cols']],
+      'tags-promo-cols': [...tagState['tags-promo-cols']],
+      'tags-promo-words': [...tagState['tags-promo-words']],
+      'tags-variant-names': [...tagState['tags-variant-names']],
+      'tags-keyword-sources': [...tagState['tags-keyword-sources']],
+    },
+    renameRows: [...document.querySelectorAll('#rename-rows .rename-from')].map((r, i) => ({
+      from: r.value, to: document.querySelectorAll('#rename-rows .rename-to')[i]?.value || ''
+    })),
+    fillRows: [...document.querySelectorAll('.fill-col')].map((r, i) => ({
+      col: r.value, val: document.querySelectorAll('.fill-val')[i]?.value || ''
+    })),
+  };
+}
+
+function applyRuleState(s) {
+  activeRules = { ...s.activeRules };
+  Object.entries(activeRules).forEach(([id, on]) => { const b = document.getElementById(`toggle-${id}`); if (b) b.classList.toggle('on', on); });
+  document.getElementById('trim-case').value = s.trimCase || 'none';
+  document.getElementById('trim-whitespace').checked = s.trimWs !== false;
+  document.getElementById('dedupe-keep').value = s.dedupeKeep || 'first';
+  document.getElementById('strip-html').checked = s.stripHtml !== false;
+  document.getElementById('strip-special').checked = !!s.stripSpecial;
+  document.getElementById('strip-custom').value = s.stripCustom || '';
+  document.getElementById('promo-brackets').checked = s.promoBrackets !== false;
+  document.getElementById('variant-source').value = s.variantSource || '';
+  document.getElementById('variant-sep').value = s.variantSep || '-';
+  document.getElementById('variant-remove-src').checked = s.variantRemoveSrc !== false;
+  document.getElementById('keyword-col-name').value = s.kwColName || '';
+  document.getElementById('keyword-sep').value = s.kwSep || ', ';
+  document.getElementById('keyword-prefix').value = s.kwPrefix || '';
+  if (s.tags) { Object.entries(s.tags).forEach(([id, vals]) => { tagState[id] = [...vals]; renderTags(id); }); }
+  document.getElementById('rename-rows').innerHTML = '';
+  (s.renameRows || []).forEach(r => { addRenameRow(); const froms = document.querySelectorAll('#rename-rows .rename-from'), tos = document.querySelectorAll('#rename-rows .rename-to'); froms[froms.length-1].value = r.from; tos[tos.length-1].value = r.to; });
+  document.getElementById('fill-rows').innerHTML = '';
+  (s.fillRows || []).forEach(r => { addFillRow(); const cols = document.querySelectorAll('.fill-col'), vals = document.querySelectorAll('.fill-val'); cols[cols.length-1].value = r.col; vals[vals.length-1].value = r.val; });
+}
+
+function loadRulesets() { try { return JSON.parse(localStorage.getItem('csv-cleaner-rulesets') || '[]'); } catch { return []; } }
+function saveRulesets(rs) { localStorage.setItem('csv-cleaner-rulesets', JSON.stringify(rs)); }
+
+function openSaveModal() { document.getElementById('saveModal').classList.add('open'); setTimeout(() => document.getElementById('rulesetName').focus(), 100); }
+function closeSaveModal() { document.getElementById('saveModal').classList.remove('open'); document.getElementById('rulesetName').value = ''; }
+
+function saveRuleset() {
+  const name = document.getElementById('rulesetName').value.trim();
+  if (!name) { notify('Enter a name'); return; }
+  let rs = loadRulesets();
+  const idx = rs.findIndex(r => r.name === name);
+  const entry = { name, date: new Date().toLocaleDateString(), state: getRuleState() };
+  if (idx > -1) rs[idx] = entry; else { rs.unshift(entry); if (rs.length > 3) rs = rs.slice(0, 3); }
+  saveRulesets(rs); renderRulesetList(); closeSaveModal();
+  notify(`Saved "${name}"`);
+}
+
+function renderRulesetList() {
+  const rs = loadRulesets();
+  const list = document.getElementById('rulesets-list');
+  list.innerHTML = '';
+  if (!rs.length) { list.innerHTML = '<p style="font-family:var(--mono);font-size:0.65rem;color:var(--muted)">No saved rulesets yet.</p>'; return; }
+  rs.forEach((r, i) => {
+    const item = document.createElement('div'); item.className = 'ruleset-item';
+    item.innerHTML = `<span class="rs-name">${escHtml(r.name)}</span><span class="rs-date">${r.date}</span><button class="btn btn-secondary btn-sm" onclick="loadRuleset(${i})">Load</button><button class="btn btn-danger btn-sm" onclick="deleteRuleset(${i})">✕</button>`;
+    list.appendChild(item);
+  });
+}
+
+function loadRuleset(i) { const rs = loadRulesets(); applyRuleState(rs[i].state); notify(`Loaded "${rs[i].name}"`); }
+function deleteRuleset(i) { const rs = loadRulesets(); const n = rs[i].name; rs.splice(i,1); saveRulesets(rs); renderRulesetList(); notify(`Deleted "${n}"`); }
+
+// ─── NOTIFY ───────────────────────────────────────────────────────────────────
+let notifyTimer;
+function notify(msg) {
+  const el = document.getElementById('notify'); el.textContent = msg; el.classList.add('show');
+  clearTimeout(notifyTimer); notifyTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+document.getElementById('saveModal').addEventListener('click', e => { if (e.target === document.getElementById('saveModal')) closeSaveModal(); });
+document.getElementById('rulesetName').addEventListener('keydown', e => { if (e.key === 'Enter') saveRuleset(); if (e.key === 'Escape') closeSaveModal(); });
+</script>
+</body>
+</html>
